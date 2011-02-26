@@ -1,0 +1,18 @@
+{application, rmq_patterns,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {modules, [
+                rmq_patterns,
+                rmq_patterns_app,
+                rmq_patterns_sup,
+                rmq_control
+            ]},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { rmq_patterns_app, []}},
+  {env, []}
+ ]}.
