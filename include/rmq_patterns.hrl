@@ -1,0 +1,1 @@
+-record(detour_msg, {in_exchange, in_rkey, out_exchange, out_rkey}).
