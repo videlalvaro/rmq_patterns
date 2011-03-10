@@ -5,6 +5,7 @@
 -behaviour(gen_server).
 
 -include("amqp_client.hrl").
+-include("rmq_patterns.hrl").
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
@@ -15,10 +16,16 @@
 -export([start_demo/0, start_demo/1]).
 
 -record(state, {channel,
+                control_exchange,
+                control_rkey,
+                control_ctag,
                 proxy_queue,
                 proxy_exchange,
+                proxy_rkey,
                 rpc_exchange,
-                control_exchange,
+                rpc_rkey,
+                smart_proxy_ctag = <<"">>,
+                rpc_ctag = <<"">>,
                 correlation_id = make_ref(),
                 continuations = dict:new(),
                 stats}).
@@ -35,10 +42,9 @@
 
 demo(Opts) ->
     {ok, Connection} = amqp_connection:start(network, #amqp_params{}),
-    ProxyEx = <<"char_count">>,
-    RpcExchange = <<"char_count_server">>,
     ControlExchange = <<"control">>,
-    Pid = amqp_smart_proxy:start([Connection, ProxyEx, RpcExchange, ControlExchange, interval_ms(), Opts]),
+    ControlRKey = <<"control.smart_proxy">>,
+    Pid = amqp_smart_proxy:start([Connection, ControlExchange, ControlRKey, Opts]),
     io:format("Server started with Pid: ~p~n", [Pid]),
     Pid.
 
@@ -47,8 +53,6 @@ start_demo() ->
 
 start_demo(debug) ->
     demo([{debug, [trace]}]).
-    
-interval_ms() -> 60000.
 
 
 %% @spec (Connection, Queue, RpcHandler) -> RpcServer
@@ -62,8 +66,8 @@ interval_ms() -> 60000.
 %% specified queue and dispatches them to a specified handler function. This
 %% function returns the pid of the RPC server that can be used to stop the
 %% server.
-start([Connection, ProxyEx, RpcExchange, ControlExchange, Interval, Opts]) ->
-    {ok, Pid} = gen_server:start(?MODULE, [Connection, ProxyEx, RpcExchange, ControlExchange, Interval], Opts),
+start([Connection, ControlExchange, ControlRKey, Opts]) ->
+    {ok, Pid} = gen_server:start(?MODULE, [Connection, ControlExchange, ControlRKey], Opts),
     Pid.
 
 %% @spec (RpcServer) -> ok
@@ -83,32 +87,14 @@ clear_stats(Pid) ->
 %% gen_server callbacks
 %%--------------------------------------------------------------------------
 
-%% @private
-init([Connection, ProxyEx, RpcExchange, ControlExchange, Interval]) ->
+init([Connection, ControlExchange, ControlRKey]) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     
-    %%setup reply queue to get messages from RPC Server.
-    #'queue.declare_ok'{queue = ReplyQ} 
-        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = ReplyQ, no_ack = true}, self()),
+    {ok, ControlCTag} = amqp_utils:init_controlled_consumer(Channel, 
+                            ControlExchange, ControlRKey),
     
-    %%setup proxy exchange
-    ExDeclare = #'exchange.declare'{exchange=ProxyEx, durable = true},
-    #'exchange.declare_ok'{} = amqp_channel:call(Channel, ExDeclare),
-    
-    %%setup proxy queue to get messages from RPC Client
-    #'queue.declare_ok'{queue = ProxyQ} 
-        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
-    QueueBind = #'queue.bind'{queue = ProxyQ,
-                              exchange = ProxyEx},
-    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = ProxyQ}, self()),
-    
-    timer:send_interval(Interval, flush_stats),
-    
-    {ok, #state{channel = Channel, proxy_queue = ReplyQ, 
-        proxy_exchange = ProxyEx, rpc_exchange = RpcExchange, 
-        control_exchange = ControlExchange, stats = #stats{}}}.
+    {ok, #state{channel = Channel, control_exchange = ControlExchange, 
+                    control_rkey = ControlRKey, control_ctag = ControlCTag}}.
 
 %% @private
 handle_info(shutdown, State) ->
@@ -119,8 +105,49 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
 %% @private
-handle_info(#'basic.cancel_ok'{}, State) ->
+%% Stop to gen_server if we stop consuming from the Control Bus
+handle_info(#'basic.cancel_ok'{consumer_tag = ControlCTag}, 
+                #state{control_ctag = ControlCTag} = State) ->
     {stop, normal, State};
+
+%% @private
+%% Continue working if we stop consuming from a Proxy'ed queue
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
+
+%% Handles a message from the Control Bus to start the Smart Proxy
+handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
+             #amqp_msg{payload = Msg}},
+             #state{channel = Channel, control_ctag = ControlCTag, 
+                        smart_proxy_ctag = SPCTag, rpc_ctag = RPCCtag} = State) ->
+    
+    amqp_utils:stop_consumers([SPCTag, RPCCtag], Channel),
+    
+    #smart_proxy_msg{in_exchange = InExchange, in_rkey = InRKey, 
+         out_exchange = OutExchange, out_rkey = OutRKey, interval = Interval} = binary_to_term(Msg),
+    
+    %%setup reply queue to get messages from RPC Server.
+    #'queue.declare_ok'{queue = ReplyQ} 
+        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
+    #'basic.consume_ok'{consumer_tag = RPCCtag2} = 
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = ReplyQ, no_ack = true}, self()),
+    
+    %%setup proxy queue to get messages from RPC Client
+    #'queue.declare_ok'{queue = ProxyQ} 
+        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
+    QueueBind = #'queue.bind'{queue = ProxyQ,
+                              exchange = InExchange},
+    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
+    #'basic.consume_ok'{consumer_tag = SPCTag2} = 
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = ProxyQ}, self()),
+    
+    %% TODO add a way to stop previous interval
+    timer:send_interval(Interval, flush_stats),
+    
+    {noreply, State#state{proxy_queue = ProxyQ, proxy_exchange = InExchange, 
+                          proxy_rkey = InRKey, rpc_exchange = OutExchange, 
+                          rpc_rkey = OutRKey, smart_proxy_ctag = SPCTag2, 
+                          rpc_ctag = RPCCtag2}};
 
 %% @private
 %% handles message from the RPC Client and forwards to the RPC server
