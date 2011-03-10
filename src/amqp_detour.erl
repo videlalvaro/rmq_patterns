@@ -96,6 +96,29 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ControlCTag},
 %% Continue working if we stop consuming from a Detour Queue
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
+    
+%% Handles a message from the Control Bus to start "detouring"
+handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
+             #amqp_msg{payload = Msg}},
+             #state{channel = Channel, control_ctag = ControlCTag, 
+                        detour_ctag = DetourCTag} = State) ->
+    
+    amqp_utils:stop_consumer(DetourCTag, Channel),
+    
+    #detour_msg{in_exchange = InExchange, in_rkey = InRKey, 
+         out_exchange = OutExchange, out_rkey = OutRKey} = binary_to_term(Msg),
+
+    #'queue.declare_ok'{queue = DetourQ} 
+        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
+    QueueBind = #'queue.bind'{queue = DetourQ, exchange = InExchange,
+                                routing_key = InRKey},
+    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
+    #'basic.consume_ok'{consumer_tag = DetourCTag2} = 
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = DetourQ, no_ack = true}, self()),
+
+    {noreply, State#state{in_exchange = InExchange, in_rkey = InRKey, detour_ctag = DetourCTag2,
+                            out_exchange = OutExchange, out_rkey = OutRKey, 
+                            detour_queue = DetourQ}};
 
 %% @private
 % detours a message from InExchange to OutExchange
@@ -108,30 +131,7 @@ handle_info({#'basic.deliver'{consumer_tag = DetourCTag, exchange = InExchange},
     Publish = #'basic.publish'{exchange = OutExchange, routing_key = OutRKey},
     
     amqp_channel:call(Channel, Publish, Msg),
-    {noreply, State};
-
-%% Handles a message from the Control Bus to start "detouring"
-handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
-             #amqp_msg{payload = Msg}},
-             #state{channel = Channel, control_ctag = ControlCTag, 
-                        detour_ctag = DetourCTag} = State) ->
-    
-    #detour_msg{in_exchange = InExchange, in_rkey = InRKey, 
-         out_exchange = OutExchange, out_rkey = OutRKey} = binary_to_term(Msg),
-    
-    #'queue.declare_ok'{queue = DetourQ} 
-        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
-    QueueBind = #'queue.bind'{queue = DetourQ, exchange = InExchange,
-                                routing_key = InRKey},
-    #'queue.bind_ok'{} = amqp_channel:call(Channel, QueueBind),
-    #'basic.consume_ok'{consumer_tag = DetourCTag2} = 
-        amqp_channel:subscribe(Channel, #'basic.consume'{queue = DetourQ, no_ack = true}, self()),
-    
-    stop_previous_detour(DetourCTag, Channel),
-    
-    {noreply, State#state{in_exchange = InExchange, in_rkey = InRKey, detour_ctag = DetourCTag2,
-                            out_exchange = OutExchange, out_rkey = OutRKey, 
-                            detour_queue = DetourQ}}.
+    {noreply, State}.
 
 %% @private
 handle_call(stop, _From, State) ->
@@ -154,11 +154,3 @@ terminate(_Reason, #state{channel = Channel}) ->
 %% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
-
-stop_previous_detour(DetourCTag, Channel) ->
-    case DetourCTag of
-        <<"">> -> ok;
-        _ ->
-            #'basic.cancel_ok'{} =
-                amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = DetourCTag})
-    end.
