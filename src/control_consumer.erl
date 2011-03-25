@@ -1,14 +1,15 @@
 -module(control_consumer).
 
--export([start/0, amqp_lifecycle/0]).
+-export([start/1, amqp_lifecycle/1]).
 
 -include("amqp_client.hrl").
 
-start() ->
-    Pid = spawn(control_consumer, amqp_lifecycle, []),
+% P = control_consumer:start(<<"char_count_server.char_count">>).
+start(BindKey) ->
+    Pid = spawn(control_consumer, amqp_lifecycle, [BindKey]),
     Pid.
 
-amqp_lifecycle() ->
+amqp_lifecycle(BindKey) ->
 
     %% Start a *direct* connection to the server
     %% This is the ONLY line of code that is different from 'stocks_example.erl'
@@ -19,7 +20,6 @@ amqp_lifecycle() ->
 
     %% Now that you have access to a connection with the server, you can declare a queue and bind it to an exchange
     X = <<"control">>,
-    BindKey = <<"">>,
         
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{exclusive = true, auto_delete = true}),
