@@ -28,6 +28,7 @@
                 rpc_ctag = <<"">>,
                 correlation_id = make_ref(),
                 continuations = dict:new(),
+                t_ref,
                 stats}).
                 
 -record(proxied_req, {correlation_id,
@@ -54,26 +55,10 @@ start_demo() ->
 start_demo(debug) ->
     demo([{debug, [trace]}]).
 
-
-%% @spec (Connection, Queue, RpcHandler) -> RpcServer
-%% where
-%%      Connection = pid()
-%%      ProxyEx = binary()
-%%      RpcHandler = binary()
-%%      RpcHandler = function()
-%%      RpcServer = pid()
-%% @doc Starts a new RPC server instance that receives requests via a
-%% specified queue and dispatches them to a specified handler function. This
-%% function returns the pid of the RPC server that can be used to stop the
-%% server.
 start([Connection, ControlExchange, ControlRKey, Opts]) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, ControlExchange, ControlRKey], Opts),
     Pid.
 
-%% @spec (RpcServer) -> ok
-%% where
-%%      RpcServer = pid()
-%% @doc Stops an exisiting RPC server.
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
     
@@ -94,7 +79,8 @@ init([Connection, ControlExchange, ControlRKey]) ->
                             ControlExchange, ControlRKey),
     
     {ok, #state{channel = Channel, control_exchange = ControlExchange, 
-                    control_rkey = ControlRKey, control_ctag = ControlCTag}}.
+                    control_rkey = ControlRKey, control_ctag = ControlCTag,
+                    stats = #stats{}}}.
 
 %% @private
 handle_info(shutdown, State) ->
@@ -107,8 +93,9 @@ handle_info(#'basic.consume_ok'{}, State) ->
 %% @private
 %% Stop to gen_server if we stop consuming from the Control Bus
 handle_info(#'basic.cancel_ok'{consumer_tag = ControlCTag}, 
-                #state{control_ctag = ControlCTag} = State) ->
-    {stop, normal, State};
+                #state{control_ctag = ControlCTag, t_ref = TRef} = State) ->
+    timer:cancel(TRef),
+    {stop, normal, State#state{stats = #stats{}}};
 
 %% @private
 %% Continue working if we stop consuming from a Proxy'ed queue
@@ -118,13 +105,16 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 %% Handles a message from the Control Bus to start the Smart Proxy
 handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
              #amqp_msg{payload = Msg}},
-             #state{channel = Channel, control_ctag = ControlCTag, 
-                        smart_proxy_ctag = SPCTag, rpc_ctag = RPCCtag} = State) ->
+             #state{channel = Channel, control_ctag = ControlCTag,
+                        smart_proxy_ctag = SPCTag, rpc_ctag = RPCCtag,
+                        t_ref = TRef} = State) ->
     
     amqp_utils:stop_consumers([SPCTag, RPCCtag], Channel),
+    timer:cancel(TRef),
     
     #smart_proxy_msg{in_exchange = InExchange, in_rkey = InRKey, 
-         out_exchange = OutExchange, out_rkey = OutRKey, interval = Interval} = binary_to_term(Msg),
+         out_exchange = OutExchange, out_rkey = OutRKey, 
+         interval = Interval} = binary_to_term(Msg),
     
     %%setup reply queue to get messages from RPC Server.
     #'queue.declare_ok'{queue = ReplyQ} 
@@ -141,13 +131,12 @@ handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
     #'basic.consume_ok'{consumer_tag = SPCTag2} = 
         amqp_channel:subscribe(Channel, #'basic.consume'{queue = ProxyQ}, self()),
     
-    %% TODO add a way to stop previous interval
-    timer:send_interval(Interval, flush_stats),
+    {ok, TRef2} = timer:send_interval(Interval, flush_stats),
     
     {noreply, State#state{proxy_queue = ProxyQ, proxy_exchange = InExchange, 
                           proxy_rkey = InRKey, rpc_exchange = OutExchange, 
                           rpc_rkey = OutRKey, smart_proxy_ctag = SPCTag2, 
-                          rpc_ctag = RPCCtag2}};
+                          rpc_ctag = RPCCtag2, t_ref = TRef2}};
 
 %% @private
 %% handles message from the RPC Client and forwards to the RPC server
