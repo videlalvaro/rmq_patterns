@@ -18,7 +18,6 @@
                 detour_ctag = <<"">>, %% consumer tag for the detour queue
                 out_exchange, %% exchange to publish the detoured messages.
                 out_rkey, %% key used to publish the messages.
-                detour_queue, %% priavte queue.
                 control_exchange, %% Control Bus Exchange
                 control_rkey, %% key to bind to the control bus
                 control_ctag}). %% consumer for the control bus queue
@@ -42,25 +41,10 @@ start_demo() ->
 start_demo(debug) ->
     demo([{debug, [trace]}]).
 
-%% @spec (Connection, Queue, RpcHandler) -> RpcServer
-%% where
-%%      Connection = pid()
-%%      ProxyEx = binary()
-%%      RpcHandler = binary()
-%%      RpcHandler = function()
-%%      RpcServer = pid()
-%% @doc Starts a new RPC server instance that receives requests via a
-%% specified queue and dispatches them to a specified handler function. This
-%% function returns the pid of the RPC server that can be used to stop the
-%% server.
 start([Connection, ControlExchange, ControlRKey, Opts]) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, ControlExchange, ControlRKey], Opts),
     Pid.
 
-%% @spec (RpcServer) -> ok
-%% where
-%%      RpcServer = pid()
-%% @doc Stops an exisiting RPC server.
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
 
@@ -117,8 +101,7 @@ handle_info({#'basic.deliver'{consumer_tag = ControlCTag},
         amqp_channel:subscribe(Channel, #'basic.consume'{queue = DetourQ, no_ack = true}, self()),
 
     {noreply, State#state{in_exchange = InExchange, in_rkey = InRKey, detour_ctag = DetourCTag2,
-                            out_exchange = OutExchange, out_rkey = OutRKey, 
-                            detour_queue = DetourQ}};
+                            out_exchange = OutExchange, out_rkey = OutRKey}};
 
 %% @private
 % detours a message from InExchange to OutExchange
