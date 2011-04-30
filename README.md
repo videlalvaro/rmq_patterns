@@ -16,7 +16,7 @@ The patterns implemented so far are:
 
 To use these consumers/producers we have to understand the concept of "Control Enabled Endpoints" as explained in this blog post: [An Army of Zombie Minions for RabbitMQ](http://videlalvaro.github.com/2011/04/an-army-of-minions-for-rabbitmq.html).
 
-## Installation: ##
+## Building: ##
 
 This library requires [rebar](https://github.com/basho/rebar) to be installed.
 
