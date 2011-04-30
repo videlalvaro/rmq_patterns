@@ -3,16 +3,19 @@
   {description, ""},
   {vsn, "1"},
   {modules, [
-                rmq_patterns,
-                rmq_patterns_app,
-                rmq_patterns_sup,
-                rmq_control
+              amqp_consumer.erl,
+              amqp_control_bus.erl,
+              amqp_detour.erl,
+              amqp_smart_proxy.erl,
+              amqp_wiretap.erl,
+              amqp_utils.erl,
+              date_utils.erl,
+              rmq_patterns.app.src
             ]},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib
                  ]},
-  {mod, { rmq_patterns_app, []}},
   {env, []}
  ]}.
