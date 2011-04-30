@@ -1,0 +1,2 @@
+# AMQP Messaging Patterns #
+
