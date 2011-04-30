@@ -22,20 +22,20 @@ This library requires [rebar](https://github.com/basho/rebar) to be installed.
 
 Get the source code:
 
-  $ git clone git://github.com/videlalvaro/rmq_patterns.git
+    $ git clone git://github.com/videlalvaro/rmq_patterns.git
 
 Prepare the dependencies:
 
-  $ cd rmq_patterns
-  $ mkdir deps
-  $ wget http://www.rabbitmq.com/releases/plugins/v2.4.1/amqp_client-2.4.1.ez
-  $ wget http://www.rabbitmq.com/releases/plugins/v2.4.1/rabbit_common-2.4.1.ez
-  $ unzip -d deps amqp_client-2.4.1.ez
-  $ unzip -d deps rabbit_common-2.4.1.ez
+    $ cd rmq_patterns
+    $ mkdir deps
+    $ wget http://www.rabbitmq.com/releases/plugins/v2.4.1/amqp_client-2.4.1.ez
+    $ wget http://www.rabbitmq.com/releases/plugins/v2.4.1/rabbit_common-2.4.1.ez
+    $ unzip -d deps amqp_client-2.4.1.ez
+    $ unzip -d deps rabbit_common-2.4.1.ez
 
 Compile the source code:
 
-  $ rebar compile
+    $ rebar compile
 
 ## Usage: ##
 
