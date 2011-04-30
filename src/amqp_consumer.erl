@@ -10,7 +10,7 @@
 -export([start_link/1, start/1]).
 -export([stop/1]).
 
--export([start_demo/2, demo_callback/2]).
+-export([start_demo/2]).
 
 -record(state, {channel,
                 control_ctag,
@@ -98,6 +98,3 @@ terminate(_Reason, #state{channel = Channel}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     State.
-
-demo_callback(_Channel, #amqp_msg{payload = Msg}) ->
-  io:format("Got message ~p~n", [Msg]).
