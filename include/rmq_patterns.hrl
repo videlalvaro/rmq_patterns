@@ -1,3 +1,4 @@
 -record(detour_msg, {in_exchange, in_rkey, out_exchange, out_rkey}).
 -record(smart_proxy_msg, {in_exchange, in_rkey, out_exchange, out_rkey, interval}).
 -record(wiretap_msg, {in_exchange, in_rkey, out_exchange, out_rkey, wt_exchange, wt_rkey}).
+-record(consumer_msg, {in_exchange, in_rkey, callback}).
