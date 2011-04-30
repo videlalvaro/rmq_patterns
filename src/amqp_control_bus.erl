@@ -39,7 +39,7 @@ detour_msg(Pid, InEx, InRkey, OutEx, OutRKey) ->
     send_msg(Pid, #detour_msg{in_exchange=InEx, in_rkey=InRkey,
                         out_exchange=OutEx, out_rkey=OutRKey}, <<"control.detour">>).
 
-%% amqp_control_bus:consumer_msg(Pid, <<"my.rkey">>, {<<"my_exchange">>, <<"consumer.key">>, fun amqp_consumer:demo_callback/2}).
+%% amqp_control_bus:consumer_msg(Pid, <<"my.rkey">>, {<<"my_exchange">>, <<"consumer.key">>, fun misc:word_count_callback/2}).
 consumer_msg(Pid, ConsumerRKey, {Ex, RKey, Callback}) ->
   send_msg(Pid, #consumer_msg{in_exchange=Ex, in_rkey=RKey, callback = Callback}, ConsumerRKey).
 

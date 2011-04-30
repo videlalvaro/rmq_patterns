@@ -34,7 +34,7 @@ stop_consumers([CTag|T], Channel) ->
     end,
     stop_consumers(T, Channel).
 
-%% amqp_utils:send_msg(<<"my_exchange">>, <<"Some Message">>, <<"consumer.key">>).
+%% amqp_utils:send_msg(<<"my_exchange">>, <<"I can't explain myself, I'm afraid, Sir, because I'm not myself you see.">>, <<"consumer.key">>).
 send_msg(Exchange, Msg, RKey) ->
     {ok, Connection} = amqp_connection:start(network, #amqp_params{}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
