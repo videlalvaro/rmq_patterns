@@ -22,13 +22,13 @@
 %% amqp_consumer:start_demo(<<"control">>, <<"my.rkey">>).
 start_demo(Exchange, RKey) ->
   {ok, Connection} = amqp_connection:start(network, #amqp_params{}),
-  ?MODULE:start([Connection, Exchange, RKey, []]).
+  ?MODULE:start([Connection, Exchange, RKey]).
 
-start([Connection, ControlExchange, ControlRKey, Opts]) ->
-    gen_server:start(?MODULE, [Connection, ControlExchange, ControlRKey], Opts).
+start([Connection, ControlExchange, ControlRKey]) ->
+    gen_server:start(?MODULE, [Connection, ControlExchange, ControlRKey], []).
 
-start_link([Connection, ControlExchange, ControlRKey, Opts]) ->
-    gen_server:start_link(?MODULE, [Connection, ControlExchange, ControlRKey], Opts).
+start_link([Connection, ControlExchange, ControlRKey]) ->
+    gen_server:start_link(?MODULE, [Connection, ControlExchange, ControlRKey], []).
 
 stop(Pid) ->
     gen_server:call(Pid, stop, infinity).
@@ -52,7 +52,7 @@ handle_info(#'basic.cancel_ok'{consumer_tag = ControlCTag},
                 #state{control_ctag = ControlCTag} = State) ->
     {stop, normal, State};
 
-%% Continue working if we stop consuming from a Detour Queue
+%% Continue working if we stop consuming from a queue
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 
