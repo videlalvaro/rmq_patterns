@@ -1,9 +1,17 @@
 -module(amqp_utils).
 
 -export([init_controlled_consumer/3, stop_consumer/2, stop_consumers/2]).
--export([send_msg/3]).
+-export([send_msg/3, get_connection_params/0]).
 
 -include("amqp_client.hrl").
+
+get_connection_params() ->
+    {ok, User} = application:get_env(rabbit_user),
+    {ok, Pass} = application:get_env(rabbit_pass),
+    {ok, Vhost} = application:get_env(rabbit_vhost),
+    {ok, Host} = application:get_env(rabbit_host),
+    #amqp_params{username = User, password=Pass,
+                 virtual_host = Vhost, host = Host}.
 
 init_controlled_consumer(Channel, ControlExchange, ControlRKey) ->
 
