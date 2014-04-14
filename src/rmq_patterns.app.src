@@ -1,18 +1,18 @@
 {application, rmq_patterns,
  [
-  {description, ""},
-  {vsn, "1"},
+  {description, "Rabbitmq Usage Patterns"},
+  {vsn, "0.0.1"},
   {modules, [
-              amqp_consumer.erl,
-              amqp_control_bus.erl,
-              amqp_detour.erl,
-              amqp_smart_proxy.erl,
-              amqp_wiretap.erl,
-              amqp_utils.erl,
-              date_utils.erl,
-              rmq_patterns.app.src
+              amqp_consumer,
+              amqp_control_bus,
+              amqp_detour,
+              amqp_smart_proxy,
+              amqp_wiretap,
+              amqp_utils,
+              date_utils,
+              misc
             ]},
-  {registered, []},
+  {registered, [rmq_patterns]},
   {applications, [
                   kernel,
                   stdlib
